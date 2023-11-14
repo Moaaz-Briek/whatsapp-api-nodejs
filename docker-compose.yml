@@ -1,14 +1,14 @@
 version: '3.8'
 
 services:
-    mongodb:
-        container_name: mongodb
-        image: mongo:latest
-        restart: unless-stopped
-        ports:
-            - 27017:27017
-        volumes:
-            - db:/data/db
+    # mongodb:
+    #     container_name: mongodb
+    #     image: mongo:latest
+    #     restart: unless-stopped
+    #     ports:
+    #         - 27017:27017
+    #     volumes:
+    #         - db:/data/db
     app:
         container_name: api
         build:
@@ -16,8 +16,8 @@ services:
             dockerfile: Dockerfile
             args:
                 - PORT=${PORT}
-        depends_on:
-            - mongodb
+        # depends_on:
+        #     - mongodb
         restart: unless-stopped
         env_file: .env
         ports:
@@ -26,7 +26,7 @@ services:
             - TOKEN=${TOKEN}
             - PORT=${PORT}
             - MONGODB_ENABLED=${MONGODB_ENABLED}
-            - MONGODB_URL=mongodb://mongodb:27017
+            - MONGODB_URL==${MONGODB_URL}
             - WEBHOOK_ENABLED=${WEBHOOK_ENABLED}
             - WEBHOOK_URL=${WEBHOOK_URL}
             - WEBHOOK_BASE64=${WEBHOOK_BASE64}

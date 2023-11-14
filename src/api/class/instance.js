@@ -25,6 +25,7 @@ class WhatsAppInstance {
             level: config.log.level,
         }),
     }
+
     key = ''
     authState
     allowWebhook = undefined
@@ -59,39 +60,47 @@ class WhatsAppInstance {
     }
 
     async SendWebhook(type, body, key) {
-        if (!this.allowWebhook) return
+        if (!config.webhookEnabled) return
         this.axiosInstance
-            .post('', {
-                type,
-                body,
-                instanceKey: key,
-            })
-            .catch(() => {})
+        .post(config.webhookUrl, {
+            type,
+            body,
+            instanceKey: key,
+        }, {
+            headers: {
+                'X-Header-Name': '778CA9485BED7C2D2C39228D968FDEFRD', //for tkwin                
+            }
+        })
+        .catch((err) => {
+            console.error('3' + err);
+        });
+
     }
 
-    async init() {
+    async init() {        
         this.collection = mongoClient.db('whatsapp-api').collection(this.key)
         const { state, saveCreds } = await useMongoDBAuthState(this.collection)
         this.authState = { state: state, saveCreds: saveCreds }
         this.socketConfig.auth = this.authState.state
         this.socketConfig.browser = Object.values(config.browser)
         this.instance.sock = makeWASocket(this.socketConfig)
-        this.setHandler()
+        this.setHandler()         
         return this
     }
 
     setHandler() {
         const sock = this.instance.sock
         // on credentials update save state
-        sock?.ev.on('creds.update', this.authState.saveCreds)
+        sock?.ev.on('creds.update', async () => {
+            this.authState.saveCreds();            
+        });
 
         // on socket closed, opened, connecting
         sock?.ev.on('connection.update', async (update) => {
-            const { connection, lastDisconnect, qr } = update
-
+            const { connection, lastDisconnect, qr } = update            
             if (connection === 'connecting') return
 
-            if (connection === 'close') {
+            if (connection === 'close') {                
                 // reconnect if not logged out
                 if (
                     lastDisconnect?.error?.output?.statusCode !==
@@ -112,15 +121,15 @@ class WhatsAppInstance {
                         'connection.update',
                         'connection:close',
                     ].some((e) => config.webhookAllowedEvents.includes(e))
+                )                
+                await this.SendWebhook(
+                    'connection',
+                    {
+                        connection: connection,
+                    },
+                    this.key
                 )
-                    await this.SendWebhook(
-                        'connection',
-                        {
-                            connection: connection,
-                        },
-                        this.key
-                    )
-            } else if (connection === 'open') {
+            } else if (connection === 'open') {                
                 if (config.mongoose.enabled) {
                     let alreadyThere = await Chat.findOne({
                         key: this.key,
@@ -139,13 +148,13 @@ class WhatsAppInstance {
                         'connection:open',
                     ].some((e) => config.webhookAllowedEvents.includes(e))
                 )
-                    await this.SendWebhook(
-                        'connection',
-                        {
-                            connection: connection,
-                        },
-                        this.key
-                    )
+                await this.SendWebhook(
+                    'connection',
+                    {
+                        connection: connection,
+                    },
+                    this.key
+                )
             }
 
             if (qr) {
@@ -309,6 +318,7 @@ class WhatsAppInstance {
             //console.log('messages.update')
             //console.dir(messages);
         })
+
         sock?.ws.on('CB:call', async (data) => {
             if (data.content) {
                 if (data.content.find((e) => e.tag === 'offer')) {
@@ -444,16 +454,53 @@ class WhatsAppInstance {
         throw new Error('no account exists')
     }
 
-    async sendTextMessage(to, message) {
-        await this.verifyId(this.getWhatsAppId(to))
-        const data = await this.instance.sock?.sendMessage(
-            this.getWhatsAppId(to),
-            { text: message }
-        )
-        return data
+    async callWebhookInstance(sessionId, status = true) {
+        try {
+            await this.updateClient({
+                msghop_token: process.env.MSGHOP_TOKEN,
+                event: "instance.auth",
+                sessionId: sessionId,
+                status: status,
+                timestamp: Date.now()
+            });
+        } catch (err) {
+            console.error('1' + err);
+        }
     }
 
-    async sendMediaFile(to, file, type, caption = '', filename) {
+    async updateClient(postData) {
+        try {
+            const response = await axios.post('http://127.0.0.1:8000/webhook/v1', postData, {
+                headers: {
+                    'X-Header-Name': process.env.MSGHOP_TOKEN,
+                    'Content-Type': 'application/json',
+                    'Content-Length': Buffer.byteLength(post_data)
+                }
+            });
+
+            console.log('Response:', response.data);
+        } catch (err) {
+            console.error('2' + err);
+        }
+    }
+
+    async sendTextMessage(to, message) {
+        // await this.callWebhookInstance(this.key);
+        await this.verifyId(this.getWhatsAppId(to));
+
+        try {
+            const data = await this.instance.sock?.sendMessage(
+                this.getWhatsAppId(to),
+                { text: message }
+            );
+            return data;
+        } catch (err) {
+            console.error(err);
+            return null;
+        }
+    }
+
+    async sendMediaFile(to, file, type, caption = '', filename) {    
         await this.verifyId(this.getWhatsAppId(to))
         const data = await this.instance.sock?.sendMessage(
             this.getWhatsAppId(to),

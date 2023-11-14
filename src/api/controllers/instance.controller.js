@@ -23,7 +23,7 @@ exports.init = async (req, res) => {
         qrcode: {
             url: appUrl + '/instance/qr?key=' + data.key,
         },
-        browser: config.browser,
+        browser: config.browser, 
     })
 }
 

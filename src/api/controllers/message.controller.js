@@ -1,4 +1,4 @@
-exports.Text = async (req, res) => {
+exports.Text = async (req, res) => {    
     const data = await WhatsAppInstances[req.query.key].sendTextMessage(
         req.body.id,
         req.body.message
